@@ -1,9 +1,9 @@
 #!/usr/bin/python
 import rospy
-import click
 import math
 import actionlib
 import tf
+import ascend_msgs.msg
 
 from geographiclib.geodesic import Geodesic
 from actionlib_msgs.msg import GoalStatus
@@ -36,9 +36,9 @@ def DMS_to_decimal_format(lat,long):
 def get_origin_lat_long():
   # Get the lat long coordinates of our map frame's origin which must be publshed on topic /local_xy_origin. We use this to calculate our goal within the map frame.
   rospy.loginfo("Waiting for a message to initialize the origin GPS location...")
-  origin_pose = rospy.wait_for_message('local_xy_origin', PoseStamped)
-  origin_lat = origin_pose.pose.position.y
-  origin_long = origin_pose.pose.position.x
+  origin_pose = rospy.wait_for_message("/airsim_node/PX4/global_gps", NavSatFix)
+  origin_lat = origin_pose.latitude
+  origin_long = origin_pose.longitude
   rospy.loginfo('Received origin: lat %s, long %s.' % (origin_lat, origin_long))
   return origin_lat, origin_long
 
@@ -60,13 +60,26 @@ def calc_goal(origin_lat, origin_long, goal_lat, goal_long):
 
   return x, y
 
+def active_callback():
+    print("Goal active!")
+
+def feedback_callback(feedback):
+    pass
+    #print("Feedback - " + "Current state: " + feedback.state.data + "\n Current pose: " + str(feedback.pose_stamped))
+    # Do something with the pose: feedback.pose_stamped
+
+def done_callback(state, result):
+    pass
+    #print("Finshed with state: " + str(state) + "\nFinal Fluid state: " + result.state.data + "\n Final pose: " + str(result.pose_stamped))
+    # Do something with the pose: feedback.pose_stamped  
+
 class GpsGoal():
   def __init__(self):
     rospy.init_node('gps_goal')
 
     rospy.loginfo("Connecting to move_base...")
-    self.move_base = actionlib.SimpleActionClient('move_base', MoveBaseAction)
-    self.move_base.wait_for_server()
+    self.client = actionlib.SimpleActionClient('fluid_operation', ascend_msgs.msg.FluidAction)
+    self.client.wait_for_server()
     rospy.loginfo("Connected.")
 
     rospy.Subscriber('gps_goal_pose', PoseStamped, self.gps_goal_pose_callback)
@@ -75,9 +88,10 @@ class GpsGoal():
     # Get the lat long coordinates of our map frame's origin which must be publshed on topic /local_xy_origin. We use this to calculate our goal within the map frame.
     self.origin_lat, self.origin_long = get_origin_lat_long()
 
-  def do_gps_goal(self, goal_lat, goal_long, z=0, yaw=0, roll=0, pitch=0):
+  def do_gps_goal(self, goal_lat, goal_long, z=10, yaw=0, roll=0, pitch=0):
     # Calculate goal x and y in the frame_id given the frame's origin GPS and a goal GPS location
     x, y = calc_goal(self.origin_lat, self.origin_long, goal_lat, goal_long)
+
     # Create move_base goal
     self.publish_goal(x=x, y=y, z=z, yaw=yaw, roll=roll, pitch=pitch)
 
@@ -98,38 +112,62 @@ class GpsGoal():
     # Create move_base goal
     goal = MoveBaseGoal()
     goal.target_pose.header.frame_id = rospy.get_param('~frame_id','map')
-    goal.target_pose.pose.position.x = x
-    goal.target_pose.pose.position.y = y
-    goal.target_pose.pose.position.z =  z
-    quaternion = tf.transformations.quaternion_from_euler(roll, pitch, yaw)
-    goal.target_pose.pose.orientation.x = quaternion[0]
-    goal.target_pose.pose.orientation.y = quaternion[1]
-    goal.target_pose.pose.orientation.z = quaternion[2]
-    goal.target_pose.pose.orientation.w = quaternion[3]
+    goal.setpoint.x = x
+    goal.setpoint.y = y
+    goal.setpoint.z =  z
+    #quaternion = tf.transformations.quaternion_from_euler(roll, pitch, yaw)
+    #goal.target_pose.pose.orientation.x = quaternion[0]
+    #goal.target_pose.pose.orientation.y = quaternion[1]
+    #goal.target_pose.pose.orientation.z = quaternion[2]
+    #goal.target_pose.pose.orientation.w = quaternion[3]
     rospy.loginfo('Executing move_base goal to position (x,y) %s, %s, with %s degrees yaw.' %
             (x, y, yaw))
     rospy.loginfo("To cancel the goal: 'rostopic pub -1 /move_base/cancel actionlib_msgs/GoalID -- {}'")
 
     # Send goal
-    self.move_base.send_goal(goal)
+        goal = ascend_msgs.msg.FluidGoal()
+
+    #Should send this action when we have calculated waypoints
+    goal.mode.data = "take_off"
+
+    print("Sending goal")
+    # Sends the goal to the action server.
+    self.client.send_goal(goal, active_cb=active_callback, feedback_cb=feedback_callback, done_cb=done_callback)
+
+    # Waits for the server to finish performing the action.
+    self.client.wait_for_result()
+    goal.setpoint.x = x
+    goal.setpoint.y = y
+    goal.setpoint.z = 10
+
+
+    print("x: " +str(x)+ ", y: " +str(y) + ", z: " +str(10))
+    goal.mode.data = "move"
+    print("Sending waypoint")
+    self.client.send_goal(goal, active_cb=active_callback, feedback_cb=feedback_callback, done_cb=done_callback)
+    print("Wait for waypoint finish")
+    
+
+
+
+
+
+
     rospy.loginfo('Inital goal status: %s' % GoalStatus.to_string(self.move_base.get_state()))
     status = self.move_base.get_goal_status_text()
     if status:
       rospy.loginfo(status)
 
+    self.client.wait_for_result()  
     # Wait for goal result
-    self.move_base.wait_for_result()
     rospy.loginfo('Final goal status: %s' % GoalStatus.to_string(self.move_base.get_state()))
-    status = self.move_base.get_goal_status_text()
-    if status:
-      rospy.loginfo(status)
 
-@click.command()
-@click.option('--lat', prompt='Latitude', help='Latitude')
-@click.option('--long', prompt='Longitude', help='Longitude')
-@click.option('--roll', '-r', help='Set target roll for goal', default=0.0)
-@click.option('--pitch', '-p', help='Set target pitch for goal', default=0.0)
-@click.option('--yaw', '-y', help='Set target yaw for goal', default=0.0)
+#@click.command()
+#@click.option('--lat', prompt='Latitude', help='Latitude')
+#@click.option('--long', prompt='Longitude', help='Longitude')
+#@click.option('--roll', '-r', help='Set target roll for goal', default=0.0)
+#@click.option('--pitch', '-p', help='Set target pitch for goal', default=0.0)
+#@click.option('--yaw', '-y', help='Set target yaw for goal', default=0.0)
 def cli_main(lat, long, roll, pitch, yaw):
   """Send goal to move_base given latitude and longitude
 
