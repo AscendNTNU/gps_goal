@@ -110,22 +110,21 @@ class GpsGoal():
 
   def publish_goal(self, x=0, y=0, z=0, yaw=0, roll=0, pitch=0):
     # Create move_base goal
-    goal = MoveBaseGoal()
-    goal.target_pose.header.frame_id = rospy.get_param('~frame_id','map')
-    goal.setpoint.x = x
-    goal.setpoint.y = y
-    goal.setpoint.z =  z
+    goal = ascend_msgs.msg.FluidGoal()
+    #goal.setpoint.x = x
+    #goal.setpoint.y = y
+    #goal.setpoint.z =  z
     #quaternion = tf.transformations.quaternion_from_euler(roll, pitch, yaw)
     #goal.target_pose.pose.orientation.x = quaternion[0]
     #goal.target_pose.pose.orientation.y = quaternion[1]
     #goal.target_pose.pose.orientation.z = quaternion[2]
     #goal.target_pose.pose.orientation.w = quaternion[3]
-    rospy.loginfo('Executing move_base goal to position (x,y) %s, %s, with %s degrees yaw.' %
-            (x, y, yaw))
-    rospy.loginfo("To cancel the goal: 'rostopic pub -1 /move_base/cancel actionlib_msgs/GoalID -- {}'")
+    #rospy.loginfo('Executing move_base goal to position (x,y) %s, %s, with %s degrees yaw.' %
+     #       (x, y, yaw))
+    #rospy.loginfo("To cancel the goal: 'rostopic pub -1 /move_base/cancel actionlib_msgs/GoalID -- {}'")
 
     # Send goal
-        goal = ascend_msgs.msg.FluidGoal()
+    
 
     #Should send this action when we have calculated waypoints
     goal.mode.data = "take_off"
@@ -133,9 +132,11 @@ class GpsGoal():
     print("Sending goal")
     # Sends the goal to the action server.
     self.client.send_goal(goal, active_cb=active_callback, feedback_cb=feedback_callback, done_cb=done_callback)
-
     # Waits for the server to finish performing the action.
     self.client.wait_for_result()
+    goal = ascend_msgs.msg.FluidGoal()
+    
+    
     goal.setpoint.x = x
     goal.setpoint.y = y
     goal.setpoint.z = 10
@@ -153,14 +154,14 @@ class GpsGoal():
 
 
 
-    rospy.loginfo('Inital goal status: %s' % GoalStatus.to_string(self.move_base.get_state()))
-    status = self.move_base.get_goal_status_text()
-    if status:
-      rospy.loginfo(status)
+    #rospy.loginfo('Inital goal status: %s' % GoalStatus.to_string(self.move_base.get_state()))
+    #status = self.move_base.get_goal_status_text()
+    #if status:
+     # rospy.loginfo(status)
 
     self.client.wait_for_result()  
     # Wait for goal result
-    rospy.loginfo('Final goal status: %s' % GoalStatus.to_string(self.move_base.get_state()))
+   # rospy.loginfo('Final goal status: %s' % GoalStatus.to_string(self.move_base.get_state()))
 
 #@click.command()
 #@click.option('--lat', prompt='Latitude', help='Latitude')
