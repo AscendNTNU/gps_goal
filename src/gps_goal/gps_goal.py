@@ -9,7 +9,7 @@ from geographiclib.geodesic import Geodesic
 from actionlib_msgs.msg import GoalStatus
 from geometry_msgs.msg import PoseStamped
 from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
-from sensor_msgs.msg import NavSatFix
+from sensor_msgs.msg import NavSatFix, Imu
 
 def DMS_to_decimal_format(lat,long):
   # Check for degrees, minutes, seconds format and convert to decimal
@@ -42,7 +42,10 @@ def get_origin_lat_long():
   rospy.loginfo('Received origin: lat %s, long %s.' % (origin_lat, origin_long))
   return origin_lat, origin_long
 
-def calc_goal(origin_lat, origin_long, goal_lat, goal_long):
+
+
+
+def calc_goal(origin_lat, origin_long, goal_lat, goal_long, orientation):
   # Calculate distance and azimuth between GPS points
   geod = Geodesic.WGS84  # define the WGS84 ellipsoid
   g = geod.Inverse(origin_lat, origin_long, goal_lat, goal_long) # Compute several geodesic calculations between two GPS points 
@@ -83,8 +86,10 @@ class GpsGoal():
     rospy.loginfo("Connected.")
 
     rospy.Subscriber('gps_goal_pose', PoseStamped, self.gps_goal_pose_callback)
+    #rospy.Subscriber('/airsim_node/PX4/imu/Imu', Imu, self.orientation_callback)
     rospy.Subscriber('gps_goal_fix', NavSatFix, self.gps_goal_fix_callback)
-
+    orientation = rospy.wait_for_message('/airsim_node/PX4/imu/Imu', Imu)
+    self.orientation_callback(orientation)
     # Get the lat long coordinates of our map frame's origin which must be publshed on topic /local_xy_origin. We use this to calculate our goal within the map frame.
     self.origin_lat, self.origin_long = get_origin_lat_long()
 
@@ -94,6 +99,18 @@ class GpsGoal():
 
     # Create move_base goal
     self.publish_goal(x=x, y=y, z=z, yaw=yaw, roll=roll, pitch=pitch)
+  
+  def orientation_callback(self, msg):
+    rospy.loginfo("Got orientation")
+    rospy.loginfo(msg.orientation)
+    quaternion = (
+    msg.orientation.x,
+    msg.orientation.y,
+    msg.orientation.z,
+    msg.orientation.w)
+    self.orientation = tf.transformations.euler_from_quaternion(quaternion)
+    self.orientation = math.degrees(self.orientation[2])
+    rospy.loginfo("Yaw: {:.3f}".format(self.orientation))
 
   def gps_goal_pose_callback(self, data):
     lat = data.pose.position.y
