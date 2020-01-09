@@ -10,6 +10,7 @@ from actionlib_msgs.msg import GoalStatus
 from geometry_msgs.msg import PoseStamped
 from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
 from sensor_msgs.msg import NavSatFix, Imu
+from geometry_msgs.msg import Point
 
 def DMS_to_decimal_format(lat,long):
   # Check for degrees, minutes, seconds format and convert to decimal
@@ -95,8 +96,8 @@ class GpsGoal():
     rospy.Subscriber('gps_goal_pose', PoseStamped, self.gps_goal_pose_callback)
     #rospy.Subscriber('/airsim_node/PX4/imu/Imu', Imu, self.orientation_callback)
     #rospy.Subscriber('gps_goal_fix', NavSatFix, self.gps_goal_fix_callback)
-    orientation = rospy.wait_for_message('/airsim_node/PX4/imu/Imu', Imu)
-    self.orientation_callback(orientation)
+    # orientation = rospy.wait_for_message('/airsim_node/PX4/imu/Imu', Imu)
+    # self.orientation_callback(orientation)
     # Get the lat long coordinates of our map frame's origin which must be publshed on topic /local_xy_origin. We use this to calculate our goal within the map frame.
     self.origin_lat, self.origin_long = get_origin_lat_long()
     waypoints = self.calc_waypoint(self.origin_lat, self.origin_long, 3)
@@ -174,7 +175,7 @@ class GpsGoal():
     
 
     #Should send this action when we have calculated waypoints
-    goal.mode.data = "take_off"
+    goal.action = "take_off"
 
     print("Sending goal")
     # Sends the goal to the action server.
@@ -183,11 +184,14 @@ class GpsGoal():
     self.client.wait_for_result()
 
     goal = ascend_msgs.msg.FluidGoal()
-    goal.mode.data = "move"
-    goal.setpoint.z = 2
+    goal.action = "explore"
+    
     for point in waypoints:
-      goal.setpoint.x = point[0]
-      goal.setpoint.y = point[1]
+      path_point = Point()
+      path_point.x = point[0]
+      path_point.y = point[1]
+      path_point.z = 2
+      goal.path = [path_point]
       print("x: " +str(point[0])+ ", y: " +str(point[1]) + ", z: " +str(2))
       rospy.loginfo("Sending waypoint")
       self.client.send_goal(goal, active_cb=active_callback, feedback_cb=feedback_callback, done_cb=done_callback)
