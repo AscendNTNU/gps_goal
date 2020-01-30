@@ -6,11 +6,11 @@ import math
 #x = roll?
 
 
-goal_lat = 47.6419792175
-goal_long = -122.140106201
+goal_lat = 63.422419
+goal_long = 10.387616
 
-origin_lat = 47.6419792175
-origin_long = -122.140174866
+origin_lat = 63.423829
+origin_long = 10.385778
 
 #latitude: 47.6419792175
 #longitude: -122.140174866
@@ -27,8 +27,11 @@ def calc_goal(origin_lat, origin_long, goal_lat, goal_long):
    # Convert polar (distance and azimuth) to x,y translation in meters (needed for ROS) by finding side lenghs of a right-angle triangle
   # Convert azimuth to radians
   azimuth = math.radians(azimuth)
-  x = adjacent = math.cos(azimuth) * hypotenuse
-  y = opposite = math.sin(azimuth) * hypotenuse
+
+
+
+  y = adjacent = -math.cos(azimuth) * hypotenuse
+  x = opposite = math.sin(azimuth) * hypotenuse
   print("The translation from the origin to the goal is (x,y) {:.3f}, {:.3f} m.".format(x, y))
 
   return x, y
